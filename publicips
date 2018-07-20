@@ -1,0 +1,93 @@
+#!/usr/bin/env python
+
+# Author :  KUNAL KANNAV
+# Contact: KKANNAV AT GMAIL DOT COM
+# Code will check all the Public IP's from 'SPECIFIED DEVICE TYPE' and give you a result in a list
+# 3 different API calls are integrated in this , a) Get Device data, b) Get interface data, c) get interface attribute
+
+## NOTE : PLEASE ENTER YOUR USERID , PASSWORD AND URL FOR THE API TO WORK
+
+
+# Importing all the required modules
+import requests, json, base64, ipaddress, timeit, getpass
+
+# Defining a list to append all the data
+#retail_list = []
+
+# Defining Username and Password and rest details 
+user = "Please enter your username here"         
+pwd = "Please enter the password"
+
+server_url = "Enter the API URL here"
+headers = {"Content-Type": "application/json", "Accept": "application/json"}
+TENANT = "Initial Tenant"       
+DOMAIN = "Workspace1"         
+         
+ 
+
+def GetPublicIPs():
+    token_url= server_url + "API/login"
+    #get token
+    basic_data = user + ":" + pwd
+    basic_data = basic_data.encode("ascii")
+    auth_data = base64.b64encode(basic_data)
+    headers["Authorization"] = "Basic " + auth_data.decode()
+    token = requests.post(token_url,headers=headers).json()["token"]
+
+    # All the URL's for the 3 API calls
+    get_group_devices_url = server_url + "API/CMDB/device/getGroupDevices"
+    get_interface_attribute_url = server_url + "API/CMDB/interface/getInterfaceAttribute"
+    get_all_interfaces_url = server_url + "API/CMDB/interface/getAllInterfaces"
+    headers["Token"]=token
+    
+    #set tenant and domain
+    Tenant_url = server_url + "API/setCurrentDomain"
+    requests.post(Tenant_url,data=json.dumps({"tenantName":TENANT,"domainName":DOMAIN}),headers=headers)
+    
+    #get data for the get devices from device group
+    group_devices_data={     
+        "groupName":"Enter the device group which you want to use"
+    }
+
+    # GET Request for getting the device
+    get_group_devices = requests.get(get_group_devices_url,params=group_devices_data,headers=headers)
+
+    # Checking all the interfaces and all the IP address for each device
+    for device in json.loads(get_group_devices.text)['devices']:
+
+        #Payload for the getting all the device interfaces
+        data_for_get_all_interfaces = {"hostname" : device["hostname"]}
+
+        #GET Request for getting all the device interfaces
+        get_all_interfaces = requests.get(get_all_interfaces_url,params=data_for_get_all_interfaces,headers=headers)
+
+        #Checking all the interfaces for the given device
+        for interface in json.loads(get_all_interfaces.text)['interfaces']:
+            data_for_get_interface_attribute= { "interfaceName":interface,"hostname": device['hostname'], "attributeName": "ips" }
+            get_interface_attribute = requests.get(get_interface_attribute_url,params=data_for_get_interface_attribute,headers=headers)
+            # Getting all the Public IP addresses
+            try:    
+                for ipaddr in json.loads(get_interface_attribute.text)['interfaceAttributeValue']:
+                    ip = ipaddr['ipLoc'].split('/')[0]
+                    if ipaddress.ip_address(ip).is_private:
+                        pass
+                    else:
+                        hostname = device["hostname"]
+                        site_code = hostname[:3]
+
+                        retail_dict = { "PublicIp": ip,
+                                "hostname": hostname,
+                                "site": site_code
+                              }
+                        print(retail_dict)
+#                        retail_list.append(retail_dict)
+                        
+            except:
+                pass
+
+
+start_time = timeit.default_timer()          
+GetPublicIPs()
+elapsed = timeit.default_timer() - start_time
+print('Execution time {}'.format(elapsed))
+#print(retail_list)
